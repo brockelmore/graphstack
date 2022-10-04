@@ -71,9 +71,9 @@ fn main() {
     // add recorder inspector
     let mut inspector = OpsGraph::default();
     let (execution_result, _tx_changeset) = evm.inspect_ref(&mut inspector);
-    println!("{:?}", execution_result);
+
     let mut file = std::fs::File::create("graph.dot").expect("bad fs open");
-    file.write_all(inspector.stack_dot_str().as_bytes()).expect("bad file write");
+    file.write_all(inspector.stack_dot_str(true).as_bytes()).expect("bad file write");
     // println!("{}", inspector.backtrace_node(1919.into()));
 
     let mut file = std::fs::File::create("code_graph.dot").expect("bad fs open");

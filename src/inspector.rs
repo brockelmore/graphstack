@@ -1020,6 +1020,8 @@ pub enum OpType {
     ExtCodeCopySize,
     ExtCodeCopyDestLoc,
     SelfDestructAddress,
+    RevertMemLoc,
+    RevertMemSize
 }
 
 impl OpsGraph {
@@ -1652,8 +1654,8 @@ impl OpsGraph {
 
         let rev_elem = GraphElem::Exit(ExitType::Revert, offset_elem.clone(), size_elem.clone());
         let rev_index = self.stack_dag.add_node(rev_elem);
-        self.stack_dag.add_edge(offset, rev_index, OpType::ReturnMemLoc);
-        self.stack_dag.add_edge(size, rev_index, OpType::ReturnMemSize);
+        self.stack_dag.add_edge(offset, rev_index, OpType::RevertMemLoc);
+        self.stack_dag.add_edge(size, rev_index, OpType::RevertMemSize);
     }
 
     pub fn invalid(&mut self) {
@@ -1919,8 +1921,30 @@ impl OpsGraph {
 
 
 
-    pub fn stack_dot_str(&self) -> String {
-        format!("{:?}", Dot::new(&self.stack_dag))
+    pub fn stack_dot_str(&self, cumulative: bool) -> String {
+
+        if cumulative {
+            format!("{:?}", Dot::with_attr_getters(
+                &self.stack_dag,
+                &[petgraph::dot::Config::NodeNoLabel, petgraph::dot::Config::EdgeNoLabel],
+                &|_graph, edge_ref| {
+                    format!("label = {:?}", edge_ref.weight())
+                },
+                &|_graph, (id, node_ref)| {
+                    let color = match node_ref {
+                        GraphElem::Stack(_) => "blue",
+                        GraphElem::Memory(_) => "green",
+                        GraphElem::Code(_) => "orange",
+                        GraphElem::Events{..} => "purple",
+                        GraphElem::Exit(_, _, _) => "red",
+                    };
+                    format!("label = {:?} color = \"{}\"", self.backtrace_node(id), color)
+                }
+                )
+            )
+        } else {
+            format!("{:?}", Dot::new(&self.stack_dag))
+        }
     }
 
 
@@ -2195,6 +2219,14 @@ impl OpsGraph {
             }
             OpType::ReturnMemSize => {
                 *op_str = "Return".to_string();
+                current_op.push_back(self.backtrace_node(edge.source()));
+            }
+            OpType::RevertMemLoc => {
+                *op_str = "Revert".to_string();
+                current_op.push_front(self.backtrace_node(edge.source()));
+            }
+            OpType::RevertMemSize => {
+                *op_str = "Revert".to_string();
                 current_op.push_back(self.backtrace_node(edge.source()));
             }
             OpType::Sha3MemLoc => {
@@ -2542,7 +2574,7 @@ impl<DB: revm::Database> Inspector<DB> for OpsGraph {
     fn step(&mut self, interpreter: &mut Interpreter, _: &mut EVMData<'_, DB>, _: bool) -> Return {
         // Record reads
         let op = interpreter.contract.bytecode.bytecode()[interpreter.program_counter()];
-        println!("op: {:?}", OPCODE_JUMPMAP[op as usize]);
+        // println!("op: {:?}", OPCODE_JUMPMAP[op as usize]);
         // println!("stack: {:?}", self.stack);
         match op {
             ADD => self.add(),
